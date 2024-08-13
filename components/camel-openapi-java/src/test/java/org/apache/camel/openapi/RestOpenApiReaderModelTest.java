@@ -19,6 +19,8 @@ package org.apache.camel.openapi;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.jayway.jsonpath.DocumentContext;
+import com.jayway.jsonpath.JsonPath;
 import io.apicurio.datamodels.Library;
 import io.apicurio.datamodels.openapi.models.OasDocument;
 import org.apache.camel.BindToRegistry;
@@ -30,9 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class RestOpenApiReaderModelTest extends CamelTestSupport {
 
@@ -65,7 +65,9 @@ public class RestOpenApiReaderModelTest extends CamelTestSupport {
 
                         .get("/findAll").description("Find all users").outType(User[].class).responseMessage()
                         .message("All the found users").endResponseMessage()
-                        .to("bean:userService?method=listUsers");
+                        .to("bean:userService?method=listUsers")
+
+                        .post().description("Update all users").type(User[].class).to("bean:userService?method=updateAllUsers");
             }
         };
     }
@@ -94,14 +96,31 @@ public class RestOpenApiReaderModelTest extends CamelTestSupport {
 
         log.info(json);
 
-        assertTrue(json.contains("\"host\" : \"localhost:8080\""));
-        assertTrue(json.contains("\"description\" : \"The user returned\""));
-        assertTrue(json.contains("\"$ref\" : \"#/definitions/User\""));
-        assertTrue(json.contains("\"x-className\""));
-        assertTrue(json.contains("\"format\" : \"org.apache.camel.openapi.User\""));
-        assertTrue(json.contains("\"type\" : \"string\""));
-        assertTrue(json.contains("\"format\" : \"date\""));
-        assertFalse(json.contains("\"enum\""));
+        DocumentContext doc = JsonPath.parse(json);
+
+        assertEquals("localhost:8080", doc.read("$.host"));
+        assertEquals("/api", doc.read("$.basePath"));
+        assertEquals("http", doc.read("$.schemes[0]"));
+
+        assertEquals("#/definitions/User",
+                doc.read("$.paths['/user'].put.parameters[0].schema['$ref']"));
+
+        assertEquals("string", doc.read("$.paths['/user/{id}/{date}'].get.parameters[1].type"));
+        assertEquals("date", doc.read("$.paths['/user/{id}/{date}'].get.parameters[1].format"));
+        assertEquals("path", doc.read("$.paths['/user/{id}/{date}'].get.parameters[1].in"));
+
+        assertEquals(44, doc.read("$.definitions.User.properties.age.example", Integer.class));
+
+        // Ensure valid schema for array request body and response body CAMEL-21076
+        assertEquals("array", doc.read("$.paths['/user'].post.parameters[0].schema.type"));
+        assertEquals("#/definitions/User",
+                doc.read("$.paths['/user'].post.parameters[0].schema.items['$ref']"));
+
+        assertEquals("array",
+                doc.read("$.paths['/user/findAll'].get.responses['200'].schema.type"));
+        assertEquals("#/definitions/User",
+                doc.read("$.paths['/user/findAll'].get.responses['200'].schema.items['$ref']"));
+
         context.stop();
     }
 
@@ -128,16 +147,38 @@ public class RestOpenApiReaderModelTest extends CamelTestSupport {
 
         log.info(json);
 
-        assertTrue(json.contains("\"url\" : \"http://localhost:8080/api\""));
-        assertTrue(json.contains("\"description\" : \"The user returned\""));
-        assertTrue(json.contains("\"$ref\" : \"#/components/schemas/User\""));
-        assertTrue(json.contains("\"x-className\""));
-        assertTrue(json.contains("\"format\" : \"org.apache.camel.openapi.User\""));
-        assertTrue(json.contains("\"type\" : \"string\""));
-        assertTrue(json.contains("\"format\" : \"date\""));
-        assertTrue(json.contains("\"nullable\" : true"));
-        assertTrue(json.contains("\"example\" : 44"));
+        DocumentContext doc = JsonPath.parse(json);
+
+        assertEquals("http://localhost:8080/api", doc.read("$.servers[0].url"));
+        assertEquals("User rest service", doc.read("$.tags[0].description"));
+        assertEquals("#/components/schemas/User",
+                doc.read("$.paths['/user'].put.requestBody.content['application/json'].schema['$ref']"));
+        assertEquals("org.apache.camel.openapi.User", doc.read("$.components.schemas.User['x-className'].format"));
+
+        assertEquals("string", doc.read("$.paths['/user/{id}/{date}'].get.parameters[1].schema.type"));
+        assertEquals("date", doc.read("$.paths['/user/{id}/{date}'].get.parameters[1].schema.format"));
+
+        assertEquals(44, doc.read("$.components.schemas.User.properties.age.example", Integer.class));
+
+        // Ensure valid schema for array request body and response body CAMEL-21076
+        assertEquals("array", doc.read("$.paths['/user'].post.requestBody.content['application/json'].schema.type"));
+        assertEquals("#/components/schemas/User",
+                doc.read("$.paths['/user'].post.requestBody.content['application/json'].schema.items['$ref']"));
+
+        assertEquals("array",
+                doc.read("$.paths['/user/findAll'].get.responses['200'].content['application/json'].schema.type"));
+        assertEquals("#/components/schemas/User",
+                doc.read("$.paths['/user/findAll'].get.responses['200'].content['application/json'].schema.items['$ref']"));
+
+        // nullable is only supported in OpenAPI 3.0
+        assertEquals(true, doc.read("$.components.schemas.User.properties.age.nullable", Boolean.class));
+
+        // Ensure valid array output ref CAMEL-19818
+        assertFalse(json.contains("\"$ref\" : \"#/components/schemas/org.apache.camel.openapi.User\""));
+
+        // do not populate enum when no allowable values are set
         assertFalse(json.contains("\"enum\""));
+
         context.stop();
     }
 }

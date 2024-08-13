@@ -805,14 +805,10 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
 
         String type;
 
-        if (!classType.isPrimitive()) {
-            if (classType.isArray()) {
-                type = StringHelper.between(classType.getName(), "[L", ";") + "[]";
-            } else {
-                type = classType.getName();
-            }
+        if (classType.isArray()) {
+            type = classType.getComponentType().getName() + "[]";
         } else {
-            type = classType.getCanonicalName();
+            type = classType.getName();
         }
 
         return type;
@@ -1004,9 +1000,6 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
 
             if (verb.getType() != null) {
                 String bodyType = verb.getType();
-                if (bodyType.endsWith("[]")) {
-                    bodyType = "List[" + bodyType.substring(0, bodyType.length() - 2) + "]";
-                }
                 ParamDefinition param = findParam(verb, RestParamType.body.name());
                 if (param == null) {
                     // must be body type and set the model class as data type

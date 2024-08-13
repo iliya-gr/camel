@@ -711,8 +711,6 @@ public class RestOpenApiReader {
                     String type = getValue(camelContext, param.getDataType() != null ? param.getDataType() : verb.getType());
                     if (type != null) {
                         if (type.endsWith("[]")) {
-                            type = type.substring(0, type.length() - 2);
-
                             OasSchema arrayModel = (Oas30Schema) bp.createSchema();
                             arrayModel = modelTypeAsProperty(type, openApi, arrayModel);
                             bp.schema = arrayModel;
@@ -739,9 +737,23 @@ public class RestOpenApiReader {
                             op.requestBody.description = getValue(camelContext, param.getDescription());
                         }
                         for (String part : parts) {
+                            Oas30Schema bodySchema = (Oas30Schema) bp.schema;
+
                             Oas30MediaType mediaType = op.requestBody.createMediaType(part);
+
                             mediaType.schema = mediaType.createSchema();
-                            mediaType.schema.$ref = bp.schema.$ref;
+                            mediaType.schema.$ref = bodySchema.$ref;
+                            mediaType.schema.type = bodySchema.type;
+
+                            if (bodySchema.items instanceof Oas30Schema.Oas30ItemsSchema) {
+                                Oas30Schema.Oas30ItemsSchema items
+                                        = (Oas30Schema.Oas30ItemsSchema) mediaType.schema.createItemsSchema();
+                                items.type = ((Oas30Schema.Oas30ItemsSchema) bodySchema.items).type;
+                                items.$ref = ((Oas30Schema.Oas30ItemsSchema) bodySchema.items).$ref;
+
+                                mediaType.schema.items = items;
+                            }
+
                             op.requestBody.addMediaType(part, mediaType);
                         }
                     }
@@ -936,7 +948,6 @@ public class RestOpenApiReader {
                     String type = getValue(camelContext, param.getDataType() != null ? param.getDataType() : verb.getType());
                     if (type != null) {
                         if (type.endsWith("[]")) {
-                            type = type.substring(0, type.length() - 2);
                             OasSchema arrayModel = (Oas20Schema) bp.createSchema();
                             arrayModel = modelTypeAsProperty(type, openApi, arrayModel);
                             bp.schema = arrayModel;
