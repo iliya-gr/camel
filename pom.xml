@@ -86,9 +86,9 @@
     </modules>
 
     <scm>
-        <connection>scm:git:http://gitbox.apache.org/repos/asf/camel.git</connection>
-        <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/camel.git</developerConnection>
-        <url>https://gitbox.apache.org/repos/asf?p=camel.git;a=summary</url>
+        <connection>scm:git:http://192.168.57.230/factor-esb/camel.git</connection>
+        <developerConnection>scm:git:http://192.168.57.230/factor-esb/camel.git</developerConnection>
+        <url>http://192.168.57.230/factor-esb/camel</url>
         <tag>HEAD</tag>
     </scm>
     <issueManagement>
